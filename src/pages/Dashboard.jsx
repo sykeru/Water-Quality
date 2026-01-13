@@ -1,6 +1,6 @@
 import React from 'react';
-import { Activity } from 'lucide-react';
 import StatCard from '../components/StatCard'; 
+import WQICard from '../components/WQICard'; 
 
 const Dashboard = ({ metrics, liveValues, dataSource, historyData, lastUpdated }) => {
   return (
@@ -24,29 +24,15 @@ const Dashboard = ({ metrics, liveValues, dataSource, historyData, lastUpdated }
             {...metric} 
             liveData={liveValues[metric.type]} 
             dataSource={dataSource} 
-            historyData={historyData} // This is now 'dashboardSimData' in simulation mode
+            historyData={historyData} 
             lastTimestamp={lastUpdated} 
           />
         ))}
       </div>
 
-      {/* Footer / WQI Section */}
+      {/* Footer / WQI Section - Wrapper removed to allow full width */}
       <div className="mt-8 pt-8 border-t border-slate-200">
-        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
-          <div>
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Water Quality Index</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-black text-slate-800">92</span>
-              <span className="text-lg font-bold text-emerald-500">Excellent</span>
-            </div>
-            <p className="text-sm text-slate-500 mt-2 max-w-md">
-              Based on the weighted arithmetic mean of Temperature, pH, and Turbidity parameters relative to DENR standards.
-            </p>
-          </div>
-          <div className="h-16 w-16 rounded-full bg-orange-50 flex items-center justify-center border-2 border-orange-100">
-             <Activity className="w-8 h-8 text-orange-500" />
-          </div>
-        </div>
+         <WQICard liveValues={liveValues} />
       </div>
 
     </div>

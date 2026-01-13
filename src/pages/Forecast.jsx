@@ -290,7 +290,6 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
              </table>
          </div>
       </div>
-
     </div>
   );
 }

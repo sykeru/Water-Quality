@@ -116,3 +116,21 @@ export const getDescriptiveAnalysis = (type, value) => {
 
   return "Analyzing data...";
 };
+
+export const calculateWQI = (temp, ph, turbidity) => {
+  // Example Weighted Factor Calculation (Simplified for this project)
+  // Standard weights: pH (0.22), Turbidity (0.15), Temp (0.10)
+  
+  // 1. Calculate Sub-Indices (q-values)
+  // pH optimal is ~7.0
+  const qPh = 100 - (Math.abs(ph - 7.0) * 20); 
+  // Turbidity optimal is 0-5 NTU
+  const qTurb = Math.max(0, 100 - (turbidity * 2));
+  // Temp optimal varies, but let's assume 25°C baseline
+  const qTemp = 100 - (Math.abs(temp - 25.0) * 3);
+
+  // 2. Weighted Average
+  const wqi = (qPh * 0.4) + (qTurb * 0.4) + (qTemp * 0.2);
+  
+  return Math.min(100, Math.max(0, Math.round(wqi)));
+};

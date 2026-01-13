@@ -25,7 +25,8 @@ import Forecast from './pages/Forecast';
 import SystemLogs from './pages/SystemLogs';
 
 // Utils
-import { determineStatus } from './utils/helpers';
+// IMPORT calculateWQI from your helpers file
+import { determineStatus, calculateWQI } from './utils/helpers';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDpxdg1eDLZ12sPH1l567freEoUnIbtDwQ",
@@ -79,9 +80,9 @@ export default function WaterQualityDashboard() {
   const [user, setUser] = useState(null);
   
   // Data States
-  const [liveValues, setLiveValues] = useState({ temp: 0, ph: 0, turbidity: 0 });
+  // ADD wqi to the liveValues initial state
+  const [liveValues, setLiveValues] = useState({ temp: 0, ph: 0, turbidity: 0, wqi: 0 });
   const [historyData, setHistoryData] = useState([]); 
-  // Initialize as undefined to distinguish between "Loading" and "Empty"
   const [forecastData, setForecastData] = useState(undefined); 
   const [dashboardSimData, setDashboardSimData] = useState([]); 
 
@@ -96,7 +97,6 @@ export default function WaterQualityDashboard() {
     }
   });
 
-  // Use Ref to ensure event listeners always access the LATEST thresholds
   const thresholdsRef = useRef(thresholds);
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function WaterQualityDashboard() {
     
     const newAlerts = [];
     const now = Date.now();
-    const currentConfig = thresholdsRef.current; // Access latest config via ref
+    const currentConfig = thresholdsRef.current; 
 
     const checkParam = (param, value, label) => {
         const config = currentConfig[param];
@@ -196,7 +196,6 @@ export default function WaterQualityDashboard() {
   }, [dataSource, isSimulationRunning, isFirebaseConnected, lastHeartbeat]);
 
   // --- 1. FORECAST DATA (ALWAYS FETCH) ---
-  // Runs once on mount. Ensures Forecast page always has data.
   useEffect(() => {
     console.log("☁️ Connecting to Forecast Data...");
     const forecastRef = ref(db, DB_FORECAST_PATH);
@@ -204,7 +203,7 @@ export default function WaterQualityDashboard() {
       if (snapshot.exists()) {
         setForecastData(snapshot.val());
       } else {
-        setForecastData(null); // Explicitly null if empty
+        setForecastData(null); 
       }
     });
     return () => unsubscribe();
@@ -254,10 +253,13 @@ export default function WaterQualityDashboard() {
 
           if (parsedData.length > 0) {
             const latest = parsedData[parsedData.length - 1];
+            // CALCULATE WQI FOR REAL DATA
+            const currentWqi = calculateWQI(latest.temp, latest.ph, latest.turbidity);
             const newLive = {
               temp: latest.temp,
               ph: latest.ph,
-              turbidity: latest.turbidity
+              turbidity: latest.turbidity,
+              wqi: currentWqi // Update state with calculated WQI
             };
             setLiveValues(newLive);
             setLastHeartbeat(Date.now());
@@ -278,7 +280,6 @@ export default function WaterQualityDashboard() {
 
     let simulationInterval;
     
-    // 1. INITIALIZE IF EMPTY (Fixed: Removed historyData check)
     if (dashboardSimData.length === 0) {
         console.log("Creating Initial Simulation Data...");
         const initialQueue = [];
@@ -300,10 +301,12 @@ export default function WaterQualityDashboard() {
             });
         }
         setDashboardSimData(initialQueue);
-        setLiveValues(initialQueue[24]);
+        // CALCULATE INITIAL WQI FOR SIMULATION
+        const initialCenter = initialQueue[24];
+        const initialWqi = calculateWQI(initialCenter.temp, initialCenter.ph, initialCenter.turbidity);
+        setLiveValues({ ...initialCenter, wqi: initialWqi });
     }
 
-    // 2. RUN SIMULATION LOOP
     if (isSimulationRunning && dashboardSimData.length > 0) {
         simulationInterval = setInterval(() => {
             const now = Date.now();
@@ -313,12 +316,10 @@ export default function WaterQualityDashboard() {
 
                 const currentCenter = prevQueue[24];
                 
-                // Base Random Walk
                 let tempChange = (Math.random() - 0.5);
                 let phChange = (Math.random() - 0.5) * 0.2;
                 let turbChange = (Math.random() - 0.5) * 5;
 
-                // --- FLUCTUATION INJECTION (20% Chance) ---
                 if (Math.random() < 0.2) {
                     const type = Math.random();
                     if (type < 0.33) {
@@ -330,15 +331,18 @@ export default function WaterQualityDashboard() {
                     }
                 }
 
-                // Apply changes
                 const newTemp = Math.max(20, Math.min(35, currentCenter.temp + tempChange));
                 const newPh = Math.max(6, Math.min(10, currentCenter.ph + phChange));
-                const newTurb = Math.max(0, Math.min(500, currentCenter.turbidity + turbChange));
+                const newTurb = Math.max(0, Math.min(100, currentCenter.turbidity + turbChange));
+
+                // CALCULATE WQI FOR SIMULATED TICK
+                const simWqi = calculateWQI(newTemp, newPh, newTurb);
 
                 const newLivePoint = {
                     temp: Number(newTemp.toFixed(2)),
                     ph: Number(newPh.toFixed(2)),
-                    turbidity: Number(newTurb.toFixed(2))
+                    turbidity: Number(newTurb.toFixed(2)),
+                    wqi: simWqi // Dynamic WQI update for simulation
                 };
                 
                 const lastFuture = prevQueue[prevQueue.length - 1];
@@ -382,7 +386,7 @@ export default function WaterQualityDashboard() {
         setHistoryData([]);
         setDashboardSimData([]);
         setSystemLogs([]); 
-        setLiveValues({ temp: 0, ph: 0, turbidity: 0 });
+        setLiveValues({ temp: 0, ph: 0, turbidity: 0, wqi: 0 });
     }
   };
 
@@ -441,7 +445,7 @@ export default function WaterQualityDashboard() {
             </div>
           </div>
 
-          {activeTab !== 'dashboard' && <QuickStatsBar metrics={metrics} liveValues={liveValues || {temp:0, ph:0, turbidity:0}} />}
+          {activeTab !== 'dashboard' && <QuickStatsBar metrics={metrics} liveValues={liveValues || {temp:0, ph:0, turbidity:0, wqi:0}} />}
 
           {activeTab === 'dashboard' && (
             <Dashboard 
@@ -468,13 +472,14 @@ export default function WaterQualityDashboard() {
             />
           )}
           
-          {activeTab === 'history' && <HistoricalData dataSource={dataSource} historyData={historyData} />}
+          {activeTab === 'history' && <HistoricalData dataSource={dataSource} historyData={historyData} thresholds={thresholds} />}
           
           {activeTab === 'forecast' && (
             <Forecast 
               dataSource={dataSource} 
               forecastData={forecastData} 
               lastTimestamp={lastTimestamp} 
+              thresholds={thresholds}
             />
           )}
           
@@ -486,7 +491,7 @@ export default function WaterQualityDashboard() {
                 setIsSimulationRunning={setIsSimulationRunning} 
                 liveValues={liveValues} 
                 setLiveValues={setLiveValues}
-                forecastData={forecastData} // PASSED HERE
+                forecastData={forecastData} 
                 onClearData={handleClearData} 
             />
           )}
