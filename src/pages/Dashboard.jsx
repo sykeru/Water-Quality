@@ -2,7 +2,7 @@ import React from 'react';
 import { Activity } from 'lucide-react';
 import StatCard from '../components/StatCard'; 
 
-const Dashboard = ({ metrics, liveValues, dataSource, historyData, forecastData }) => {
+const Dashboard = ({ metrics, liveValues, dataSource, historyData, lastUpdated }) => {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
       
@@ -13,15 +13,10 @@ const Dashboard = ({ metrics, liveValues, dataSource, historyData, forecastData 
           <p className="text-slate-500 mt-1">Real-time sensor fusion and predictive analytics.</p>
         </div>
         <div className="hidden md:block text-xs font-mono text-slate-400 bg-slate-100 px-3 py-1 rounded-lg">
-           Last Data: {new Date().toLocaleTimeString()}
+           Last Update: {new Date(lastUpdated).toLocaleTimeString()}
         </div>
       </div>
 
-      {/* LAYOUT FIX: 
-        - grid-cols-1: Mobile (default)
-        - md:grid-cols-3: Force 3 columns on Tablet (md) and up. 
-          This ensures vertical monitors (which often report as tablet width) see 3 columns.
-      */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {metrics.map((metric, index) => (
           <StatCard 
@@ -29,7 +24,8 @@ const Dashboard = ({ metrics, liveValues, dataSource, historyData, forecastData 
             {...metric} 
             liveData={liveValues[metric.type]} 
             dataSource={dataSource} 
-            historyData={historyData} 
+            historyData={historyData} // This is now 'dashboardSimData' in simulation mode
+            lastTimestamp={lastUpdated} 
           />
         ))}
       </div>

@@ -57,7 +57,9 @@ export const determineStatus = (type, value) => {
   if (type === 'turbidity') {
     if (value <= 10) return 'Clear';
     if (value <= 30) return 'Cloudy';
-    return 'Turbid';
+    if (value <= 100) return 'Turbid';
+    if (value <= 500) return 'High Turbidity';
+    return 'Opaque';
   }
   return 'Unknown';
 };

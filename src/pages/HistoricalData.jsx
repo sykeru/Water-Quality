@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
-import { Zap, Check, Table as TableIcon, Play, Pause } from 'lucide-react';
+import { Zap, Check, Table as TableIcon, Play, Pause, Thermometer, Droplet, Waves } from 'lucide-react';
 
 export default function HistoricalData({ dataSource, historyData }) {
   const [range, setRange] = useState('24h');
@@ -81,7 +81,7 @@ export default function HistoricalData({ dataSource, historyData }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* 1. HEADER */}
+      {/* 1. HEADER (Unchanged) */}
       <div className="lg:col-span-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div>
           <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
@@ -113,9 +113,9 @@ export default function HistoricalData({ dataSource, historyData }) {
 
             <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
             {[
-                { label: '24h', key: '24h' },
-                { label: '7d', key: '7d' },
-                { label: '30d', key: '30d' },
+                { label: 'Last 24h', key: '24h' },
+                { label: 'Last 7d', key: '7d' },
+                { label: 'Last 30d', key: '30d' },
                 { label: 'All', key: 'all' }
             ].map((item) => (
                 <button 
@@ -134,40 +134,63 @@ export default function HistoricalData({ dataSource, historyData }) {
         </div>
       </div>
 
-      {/* 2. LEFT COLUMN: PARAMETERS */}
-      <div className="lg:col-span-1 space-y-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Zap className="w-5 h-5 text-amber-500" /> Parameters</h3>
-          <div className="space-y-2">
-            {[
-              { id: 'temp', label: 'Temperature', color: 'bg-blue-500', border: 'border-blue-200', activeBg: 'bg-blue-50' },
-              { id: 'ph', label: 'pH Level', color: 'bg-emerald-500', border: 'border-emerald-200', activeBg: 'bg-emerald-50' },
-              { id: 'turbidity', label: 'Turbidity', color: 'bg-amber-500', border: 'border-amber-200', activeBg: 'bg-amber-50' }
-            ].map(item => (
-              <div key={item.id} onClick={() => toggleParam(item.id)} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${visibleParams[item.id] ? `${item.activeBg} ${item.border} shadow-sm` : 'border-slate-100 hover:bg-slate-50'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                  <span className={`text-sm font-semibold ${visibleParams[item.id] ? 'text-slate-800' : 'text-slate-500'}`}>{item.label}</span>
-                </div>
-                {visibleParams[item.id] && <Check className="w-4 h-4 text-slate-700" />}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. CHART COLUMN */}
-      <div className="lg:col-span-3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm min-h-[500px] flex flex-col">
+      {/* 2. CHART COLUMN (Modified: Full Width & Included Buttons) */}
+      <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm min-h-[500px] flex flex-col">
           {displayData.length > 0 ? (
               <div className="flex-1 w-full min-h-0 flex flex-col">
-                  <div className="flex justify-between items-center mb-6 flex-none">
-                      <h3 className="text-lg font-bold text-slate-700">Overview Trends</h3>
-                      {!isLive && (
-                          <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 animate-pulse">
-                              ⏸ Data Paused
-                          </span>
-                      )}
+                  
+                  {/* CHART HEADER with BUTTONS */}
+                  <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 flex-none">
+                      <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-bold text-slate-700">Overview Trends</h3>
+                          {!isLive && (
+                              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 animate-pulse">
+                                  ⏸ Paused
+                              </span>
+                          )}
+                      </div>
+
+                      {/* PARAMETER TOGGLES (Replaces Legend) */}
+                      <div className="flex gap-2">
+                          <button 
+                            onClick={() => toggleParam('temp')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                              visibleParams.temp 
+                              ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                              : 'bg-white text-slate-400 border-slate-200 opacity-60 hover:opacity-100'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${visibleParams.temp ? 'bg-blue-500' : 'bg-slate-300'}`}></span>
+                            Temp
+                          </button>
+
+                          <button 
+                            onClick={() => toggleParam('ph')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                              visibleParams.ph 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : 'bg-white text-slate-400 border-slate-200 opacity-60 hover:opacity-100'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${visibleParams.ph ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                            pH
+                          </button>
+
+                          <button 
+                            onClick={() => toggleParam('turbidity')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                              visibleParams.turbidity 
+                              ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                              : 'bg-white text-slate-400 border-slate-200 opacity-60 hover:opacity-100'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${visibleParams.turbidity ? 'bg-amber-500' : 'bg-slate-300'}`}></span>
+                            Turbidity
+                          </button>
+                      </div>
                   </div>
+
+                  {/* CHART */}
                   <div className="flex-1 w-full min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={displayData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -179,7 +202,7 @@ export default function HistoricalData({ dataSource, historyData }) {
                         <XAxis dataKey="displayTime" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} dy={10} minTickGap={40} />
                         <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} domain={['auto', 'auto']} width={30} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend verticalAlign="top" height={36} iconType="circle" />
+                        {/* Legend Removed as requested */}
                         
                         {visibleParams.temp && <Area type="monotone" dataKey="temp" name="Temperature (°C)" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorTemp)" isAnimationActive={false} />}
                         {visibleParams.ph && <Area type="monotone" dataKey="ph" name="pH Level" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorPh)" isAnimationActive={false} />}
@@ -195,7 +218,7 @@ export default function HistoricalData({ dataSource, historyData }) {
           )}
       </div>
 
-      {/* 4. UPDATED DATASET TABLE (DYNAMIC COLUMNS) */}
+      {/* 3. DATASET TABLE (Unchanged) */}
       <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">

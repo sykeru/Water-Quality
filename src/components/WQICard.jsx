@@ -1,130 +1,115 @@
 import React, { useMemo } from 'react';
-import { Droplets, Info } from 'lucide-react';
+import { Activity, Info } from 'lucide-react';
 
 export default function WQICard({ liveValues }) {
   
   // --- WQI CALCULATION ENGINE ---
-  const { wqi, status, color, insight } = useMemo(() => {
-    // 1. Extract Values (Default to safe values if missing to avoid NaN)
+  const { wqi, status, color, barColor, insight } = useMemo(() => {
+    // 1. Extract Values
     const temp = liveValues?.temp || 0;
     const ph = liveValues?.ph || 7;
     const turb = liveValues?.turbidity || 0;
 
-    // 2. Normalize Parameters (Convert to 0-100 Quality Rating - Qi)
-    
-    // pH: Ideal is 7.5. Deviation lowers score.
-    // If pH is 7.5, score is 100. If pH < 4 or > 11, score drops rapidly.
+    // 2. Normalize Parameters (0-100 Scale)
     let phDiff = Math.abs(ph - 7.5);
-    let qPh = 100 - (phDiff * 20); 
-    qPh = Math.max(0, Math.min(100, qPh)); // Clamp between 0-100
+    let qPh = Math.max(0, Math.min(100, 100 - (phDiff * 20)));
 
-    // Turbidity: Ideal is 0-5. 
-    // 0 NTU = 100 score. 50 NTU = 0 score.
-    let qTurb = 100 - (turb * 2);
-    qTurb = Math.max(0, Math.min(100, qTurb));
+    let qTurb = Math.max(0, Math.min(100, 100 - (turb * 2)));
 
-    // Temperature: Ideal is 25. 
-    // Deviation lowers score.
     let tempDiff = Math.abs(temp - 25);
-    let qTemp = 100 - (tempDiff * 5); 
-    qTemp = Math.max(0, Math.min(100, qTemp));
+    let qTemp = Math.max(0, Math.min(100, 100 - (tempDiff * 5)));
 
-    // 3. Apply Weights (Wi)
-    // pH is critical (0.5), Turbidity visual (0.3), Temp seasonal (0.2)
+    // 3. Apply Weights
     const wPh = 0.5;
     const wTurb = 0.3;
     const wTemp = 0.2;
 
     const finalWQI = (qPh * wPh) + (qTurb * wTurb) + (qTemp * wTemp);
     
-    // 4. Determine Status
-    let calcStatus = "Poor";
-    let calcColor = "bg-red-500 text-red-600 border-red-200";
-    let calcInsight = "Water quality is critical. Not suitable for use.";
+    // 4. Determine Status & SOLID Colors (No Gradients)
+    let s, c, b, i;
 
     if (finalWQI >= 85) {
-      calcStatus = "Excellent";
-      calcColor = "bg-emerald-500 text-emerald-600 border-emerald-200";
-      calcInsight = "The water quality is suitable for all uses, including drinking and aquatic life. All parameters are within optimal ranges.";
+      s = "Excellent";
+      c = "text-emerald-600 bg-emerald-50 border-emerald-200"; // Pill
+      b = "bg-emerald-500"; // Bar (Green)
+      i = "Water quality is excellent. Suitable for all purposes.";
     } else if (finalWQI >= 70) {
-      calcStatus = "Good";
-      calcColor = "bg-blue-500 text-blue-600 border-blue-200";
-      calcInsight = "Water quality is acceptable. Minor deviations in turbidity or pH observed.";
+      s = "Good";
+      c = "text-emerald-600 bg-emerald-50 border-emerald-200"; // Pill (Green-ish)
+      b = "bg-emerald-400"; // Bar (Light Green)
+      i = "Water quality is good. Minor deviations observed.";
     } else if (finalWQI >= 50) {
-      calcStatus = "Fair";
-      calcColor = "bg-amber-500 text-amber-600 border-amber-200";
-      calcInsight = "Water quality is compromised. Moderate pollution detected.";
-    } else if (finalWQI >= 30) {
-        calcStatus = "Poor";
-        calcColor = "bg-orange-500 text-orange-600 border-orange-200";
-        calcInsight = "Significant pollution. Treatment required before use.";
+      s = "Fair";
+      c = "text-amber-600 bg-amber-50 border-amber-200"; // Pill
+      b = "bg-amber-400"; // Bar (Yellow/Amber)
+      i = "Water quality is fair. Moderate treatment required.";
     } else {
-        calcStatus = "Very Poor";
-        calcColor = "bg-rose-600 text-rose-700 border-rose-200";
-        calcInsight = "Critical levels of contamination. Hazardous to aquatic life.";
+      s = "Poor";
+      c = "text-rose-600 bg-rose-50 border-rose-200"; // Pill
+      b = "bg-rose-500"; // Bar (Red)
+      i = "Water quality is poor. Significant contamination detected.";
     }
 
     return { 
         wqi: Math.round(finalWQI), 
-        status: calcStatus, 
-        color: calcColor, 
-        insight: calcInsight 
+        status: s, 
+        color: c, 
+        barColor: b,
+        insight: i 
     };
 
   }, [liveValues]);
 
-  // Extract base color class for the bar (remove text/border classes)
-  const barColor = color.split(' ')[0]; 
-  const textColor = color.split(' ')[1];
-
   return (
-    <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="bg-white rounded-3xl p-6 shadow-xl shadow-slate-200/60 border border-slate-100 flex flex-col h-full animate-in fade-in slide-in-from-bottom-6">
       
-      {/* HEADER SECTION */}
+      {/* 1. UNIFORM HEADER (Matches StatCard) */}
       <div className="flex justify-between items-start mb-6">
-        <div>
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Water Quality Index</h3>
-            <div className="flex items-end gap-3">
-                <span className="text-6xl font-black text-slate-800 leading-none">{wqi}</span>
-                <div className="flex flex-col mb-1">
-                    <span className="text-xs font-bold text-slate-400">WQI Score</span>
-                    <span className={`text-lg font-bold ${textColor}`}>{status}</span>
-                </div>
-            </div>
-        </div>
-        <div className={`p-3 rounded-2xl bg-opacity-10 border ${color.replace('text-', 'border-').replace('bg-', 'bg-opacity-10 ')}`}>
-            <Droplets className={`w-6 h-6 ${textColor}`} />
+        <h3 className="text-slate-700 font-bold text-lg">Water Quality Index</h3>
+        <div className="p-2 bg-slate-50 rounded-xl">
+            <Activity className="text-slate-400 w-5 h-5" />
         </div>
       </div>
 
-      {/* PROGRESS BAR */}
-      <div className="w-full mb-4">
-        <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
-            <span>0</span>
-            <span>25</span>
-            <span>50</span>
-            <span>75</span>
-            <span>100</span>
+      {/* 2. SCORE DISPLAY */}
+      <div className="flex items-end gap-4 mb-6">
+        <span className="text-6xl font-black text-slate-800 leading-none tracking-tight">
+            {wqi}
+        </span>
+        <div className="mb-1.5">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${color}`}>
+                {status}
+            </span>
         </div>
-        <div className="h-6 bg-slate-100 rounded-full overflow-hidden relative shadow-inner">
-            {/* Background markers */}
-            <div className="absolute top-0 bottom-0 left-1/4 w-0.5 bg-white opacity-50 z-10"></div>
-            <div className="absolute top-0 bottom-0 left-2/4 w-0.5 bg-white opacity-50 z-10"></div>
-            <div className="absolute top-0 bottom-0 left-3/4 w-0.5 bg-white opacity-50 z-10"></div>
-            
-            {/* The Bar */}
+      </div>
+
+      {/* 3. HORIZONTAL VISUALIZATION BAR */}
+      <div className="w-full mb-6">
+        {/* Labels */}
+        <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wide">
+            <span>Critical</span>
+            <span>Poor</span>
+            <span>Fair</span>
+            <span>Good</span>
+            <span>Excellent</span>
+        </div>
+        
+        {/* Track */}
+        <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative">
+            {/* The Fill Bar */}
             <div 
-                className={`h-full ${barColor} transition-all duration-1000 ease-out relative`} 
+                className={`h-full ${barColor} transition-all duration-1000 ease-out rounded-full relative`} 
                 style={{ width: `${wqi}%` }}
             >
-                {/* Glare effect */}
-                <div className="absolute top-0 left-0 right-0 h-[2px] bg-white opacity-30"></div>
+                {/* Optional: Simple shine to make it look 'wet' without being a gradient */}
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-white opacity-40"></div>
             </div>
         </div>
       </div>
 
-      {/* INSIGHT FOOTER */}
-      <div className="flex items-start gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+      {/* 4. INSIGHT FOOTER */}
+      <div className="mt-auto bg-slate-50 p-4 rounded-2xl border border-slate-100 flex gap-3 items-start">
         <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
         <p className="text-xs text-slate-500 font-medium leading-relaxed">
             {insight}

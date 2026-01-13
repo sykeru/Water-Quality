@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { Zap, Check, Lightbulb, TrendingUp, Table as TableIcon } from 'lucide-react';
+import { Table as TableIcon, Loader2 } from 'lucide-react';
 
 export default function Forecast({ dataSource, forecastData, lastTimestamp = Date.now() }) {
   const [activeInterval, setActiveInterval] = useState('hourly_24h');
@@ -10,67 +10,58 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
 
   // --- DATA PROCESSING ENGINE ---
   const data = useMemo(() => {
-    if (dataSource === 'real') {
-      if (!forecastData || !forecastData['Surface Temperature']) return [];
+    // Check for explicit undefined to handle loading vs empty
+    if (!forecastData || !forecastData['Surface Temperature']) return [];
 
-      const tempNode = forecastData['Surface Temperature']?.[activeInterval];
-      const phNode = forecastData['pH']?.[activeInterval];
-      const turbNode = forecastData['Turbidity']?.[activeInterval];
+    const tempNode = forecastData['Surface Temperature']?.[activeInterval];
+    const phNode = forecastData['pH']?.[activeInterval];
+    const turbNode = forecastData['Turbidity']?.[activeInterval];
 
-      if (!tempNode) return [];
+    if (!tempNode) return [];
 
-      const indices = Object.keys(tempNode).sort((a,b) => Number(a) - Number(b));
+    const indices = Object.keys(tempNode).sort((a,b) => Number(a) - Number(b));
 
-      return indices.map(i => {
-        const index = Number(i);
-        let displayLabel = `+${index+1}`; // X-Axis Label (Short)
-        
-        // --- DATE CALCULATION LOGIC ---
-        let timeOffset = 0;
-        
-        if (activeInterval.includes('hourly')) {
-            displayLabel += 'h';
-            // Hourly means +1 hour per index
-            timeOffset = (index + 1) * 60 * 60 * 1000;
-        } else {
-            displayLabel += 'd';
-            // Daily means +1 day per index
-            timeOffset = (index + 1) * 24 * 60 * 60 * 1000;
-        }
+    return indices.map(i => {
+      const index = Number(i);
+      let displayLabel = `+${index+1}`; 
+      
+      let timeOffset = 0;
+      if (activeInterval.includes('hourly')) {
+          displayLabel += 'h';
+          timeOffset = (index + 1) * 3600000;
+      } else {
+          displayLabel += 'd';
+          timeOffset = (index + 1) * 86400000;
+      }
 
-        // Calculate the future date based on the LAST received data point
-        const futureDate = new Date(lastTimestamp + timeOffset);
-        
-        // Format it nicely for the tooltip and table
-        const fullDateStr = futureDate.toLocaleString([], {
-            month: 'short', day: 'numeric', year: 'numeric',
-            hour: activeInterval.includes('hourly') ? '2-digit' : undefined,
-            minute: activeInterval.includes('hourly') ? '2-digit' : undefined,
-        });
-
-        return {
-          id: i,
-          name: displayLabel,
-          fullDate: fullDateStr, 
-          
-          temp_forecast: tempNode[i] ? Number(tempNode[i]) : null,
-          ph_forecast: phNode && phNode[i] ? Number(phNode[i]) : null,
-          turb_forecast: turbNode && turbNode[i] ? Number(turbNode[i]) : null,
-        };
+      const futureDate = new Date(lastTimestamp + timeOffset);
+      
+      const fullDateStr = futureDate.toLocaleString([], {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: activeInterval.includes('hourly') ? '2-digit' : undefined,
+          minute: activeInterval.includes('hourly') ? '2-digit' : undefined,
       });
-    }
-    
-    return [];
-  }, [dataSource, forecastData, activeInterval, lastTimestamp]);
+
+      return {
+        id: i,
+        name: displayLabel,
+        fullDate: fullDateStr, 
+        temp_forecast: tempNode[i] ? Number(tempNode[i]) : null,
+        ph_forecast: phNode && phNode[i] ? Number(phNode[i]) : null,
+        turb_forecast: turbNode && turbNode[i] ? Number(turbNode[i]) : null,
+      };
+    });
+  }, [forecastData, activeInterval, lastTimestamp]);
 
   const toggleParam = (key) => setVisibleParams(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // --- CUSTOM TOOLTIP ---
+  // --- LOADING STATE ---
+  // If forecastData is explicitly undefined, we are connecting.
+  const isLoading = forecastData === undefined;
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-      // Get the calculated date from the first payload item
       const dateStr = payload[0].payload.fullDate;
-
       return (
         <div className="bg-white/95 backdrop-blur-sm p-3 border border-slate-200 shadow-xl rounded-xl text-xs z-50">
           <p className="font-bold text-slate-700 mb-2 border-b border-slate-100 pb-1">
@@ -95,7 +86,7 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
-      {/* HEADER */}
+      {/* 1. HEADER */}
       <div className="lg:col-span-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div>
           <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
@@ -106,6 +97,11 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500"></span>
               </span>
             )}
+            {dataSource === 'simulation' && (
+               <span className="bg-indigo-100 text-indigo-700 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wide">
+                 Simulated Time
+               </span>
+            )}
           </h2>
           <p className="text-slate-500 text-sm">Projected trends based on historical data patterns.</p>
         </div>
@@ -113,9 +109,9 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
         {/* INTERVAL CONTROLS */}
         <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto">
           {[
-            { label: 'Next 24 Hours', key: 'hourly_24h' },
-            { label: 'Next 7 Days', key: 'daily_7d' },
-            { label: 'Next 30 Days', key: 'daily_30d' }
+            { label: 'Next 24H', key: 'hourly_24h' },
+            { label: 'Next 7D', key: 'daily_7d' },
+            { label: 'Next 30D', key: 'daily_30d' }
           ].map((item) => (
             <button 
               key={item.key} 
@@ -132,93 +128,109 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
         </div>
       </div>
 
-      {/* LEFT COLUMN: PARAMETERS */}
-      <div className="lg:col-span-1 space-y-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Zap className="w-5 h-5 text-amber-500" /> Parameters</h3>
-          <div className="space-y-2">
-            {[
-              { id: 'temp', label: 'Temperature', color: 'bg-blue-500', border: 'border-blue-200', activeBg: 'bg-blue-50' },
-              { id: 'ph', label: 'pH Level', color: 'bg-emerald-500', border: 'border-emerald-200', activeBg: 'bg-emerald-50' },
-              { id: 'turb', label: 'Turbidity', color: 'bg-amber-500', border: 'border-amber-200', activeBg: 'bg-amber-50' }
-            ].map(item => (
-              <div key={item.id} onClick={() => toggleParam(item.id)} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${visibleParams[item.id] ? `${item.activeBg} ${item.border} shadow-sm` : 'border-slate-100 hover:bg-slate-50'}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                  <span className={`text-sm font-semibold ${visibleParams[item.id] ? 'text-slate-800' : 'text-slate-500'}`}>{item.label}</span>
-                </div>
-                {visibleParams[item.id] && <Check className="w-4 h-4 text-slate-700" />}
+      {/* 2. CHART COLUMN (FULL WIDTH) */}
+      <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm min-h-[500px] flex flex-col">
+        {isLoading ? (
+            <div className="flex flex-col items-center justify-center flex-1 gap-3 text-slate-400 animate-pulse">
+                <Loader2 className="w-10 h-10 animate-spin text-violet-500" />
+                <span className="text-sm font-bold">Connecting to Database...</span>
+            </div>
+        ) : data.length > 0 ? (
+            <div className="flex-1 w-full min-h-0 flex flex-col">
+              
+              {/* CHART HEADER with BUTTONS */}
+              <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 flex-none">
+                  <h3 className="text-lg font-bold text-slate-700">Forecast Trends</h3>
+
+                  {/* PARAMETER TOGGLES (Inside Chart Header) */}
+                  <div className="flex gap-2">
+                      <button 
+                        onClick={() => toggleParam('temp')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                          visibleParams.temp 
+                          ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                          : 'bg-white text-slate-400 border-slate-200 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${visibleParams.temp ? 'bg-blue-500' : 'bg-slate-300'}`}></span>
+                        Temp
+                      </button>
+
+                      <button 
+                        onClick={() => toggleParam('ph')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                          visibleParams.ph 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                          : 'bg-white text-slate-400 border-slate-200 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${visibleParams.ph ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                        pH
+                      </button>
+
+                      <button 
+                        onClick={() => toggleParam('turb')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                          visibleParams.turb 
+                          ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                          : 'bg-white text-slate-400 border-slate-200 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${visibleParams.turb ? 'bg-amber-500' : 'bg-slate-300'}`}></span>
+                        Turbidity
+                      </button>
+                  </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* INSIGHTS */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-             <Lightbulb className="w-5 h-5 text-violet-500" /> AI Insights
-           </h3>
-           {data.length > 0 ? (
-             <div className="space-y-4">
-               <div className="p-3 bg-violet-50 rounded-xl border border-violet-100 text-xs text-violet-800 leading-snug">
-                 <TrendingUp className="w-4 h-4 mb-1" />
-                 <strong>Trend Analysis:</strong> Data indicates a {activeInterval.includes('hourly') ? 'short-term' : 'long-term'} fluctuation pattern consistent with seasonal baselines.
-               </div>
-             </div>
-           ) : (
-             <div className="text-xs text-slate-400 italic">Waiting for data...</div>
-           )}
-        </div>
-      </div>
+              <div className="flex-grow w-full h-full min-h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
+                      <linearGradient id="gradPh" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="100%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
+                      <linearGradient id="gradTurb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2}/><stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} minTickGap={30} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} domain={['auto', 'auto']} />
+                    <Tooltip content={<CustomTooltip />} />
+                    
+                    {/* LEGEND REMOVED - Controlled by Buttons */}
 
-      {/* CHART COLUMN */}
-      <div className="lg:col-span-3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm min-h-[500px] flex flex-col items-center justify-center">
-        {data.length > 0 ? (
-            <div className="flex-grow w-full h-full min-h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="gradPh" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="100%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="gradTurb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2}/><stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} minTickGap={30} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} domain={['auto', 'auto']} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend verticalAlign="top" height={36}/>
-
-                  {visibleParams.temp && (
-                    <>
-                      {/* Added tooltipType="none" to remove duplicate black label from tooltip */}
-                      <Area type="monotone" dataKey="temp_forecast" fill="url(#gradTemp)" stroke="none" tooltipType="none" />
-                      <Line type="monotone" dataKey="temp_forecast" name="Temperature" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                    </>
-                  )}
-                  {visibleParams.ph && (
-                    <>
-                      <Area type="monotone" dataKey="ph_forecast" fill="url(#gradPh)" stroke="none" tooltipType="none" />
-                      <Line type="monotone" dataKey="ph_forecast" name="pH Level" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                    </>
-                  )}
-                  {visibleParams.turb && (
-                    <>
-                      <Area type="monotone" dataKey="turb_forecast" fill="url(#gradTurb)" stroke="none" tooltipType="none" />
-                      <Line type="monotone" dataKey="turb_forecast" name="Turbidity" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                    </>
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
+                    {visibleParams.temp && (
+                      <>
+                        <Area type="monotone" dataKey="temp_forecast" fill="url(#gradTemp)" stroke="none" tooltipType="none" />
+                        <Line type="monotone" dataKey="temp_forecast" name="Temperature" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                      </>
+                    )}
+                    {visibleParams.ph && (
+                      <>
+                        <Area type="monotone" dataKey="ph_forecast" fill="url(#gradPh)" stroke="none" tooltipType="none" />
+                        <Line type="monotone" dataKey="ph_forecast" name="pH Level" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                      </>
+                    )}
+                    {visibleParams.turb && (
+                      <>
+                        <Area type="monotone" dataKey="turb_forecast" fill="url(#gradTurb)" stroke="none" tooltipType="none" />
+                        <Line type="monotone" dataKey="turb_forecast" name="Turbidity" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                      </>
+                    )}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
         ) : (
-            <div className="flex flex-col items-center justify-center text-slate-400">
-               <div className="text-sm font-medium italic">Fetching forecast data...</div>
-               <div className="text-xs mt-2">Ensure database path <code className="bg-slate-100 px-1 py-0.5 rounded">/RiverMonitor/Forecasts/data</code> exists.</div>
+            <div className="flex flex-col items-center justify-center flex-1 text-slate-400">
+               <div className="text-sm font-medium italic">No forecast data available.</div>
+               <div className="text-xs mt-2 text-center">
+                  Ensure database path <br/>
+                  <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">/RiverMonitor/Forecasts/data</code> exists.
+               </div>
             </div>
         )}
       </div>
 
-      {/* NEW: FORECAST DATA TABLE */}
+      {/* 3. FORECAST DATA TABLE */}
       <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
          <div className="flex items-center justify-between mb-4">
              <div className="flex items-center gap-2">
@@ -270,7 +282,7 @@ export default function Forecast({ dataSource, forecastData, lastTimestamp = Dat
                      ) : (
                          <tr>
                              <td colSpan="4" className="px-4 py-8 text-center text-slate-400 italic">
-                                 No forecast data available for this range.
+                                 {isLoading ? 'Loading forecast...' : 'No forecast data available for this range.'}
                              </td>
                          </tr>
                      )}
