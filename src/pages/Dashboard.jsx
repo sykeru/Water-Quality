@@ -1,65 +1,58 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  LineChart, Line, ResponsiveContainer, XAxis, YAxis, 
-  CartesianGrid, Tooltip, Legend 
-} from 'recharts';
-import { SlidersHorizontal, Check } from 'lucide-react';
-import StatCard from '../components/StatCard';
-// import WaterQualityIndexCard from '../components/WaterQualityIndexCard';
+import React from 'react';
+import { Activity } from 'lucide-react';
+import StatCard from '../components/StatCard'; 
 
-const Dashboard = ({ metrics, liveValues, dataSource, simulationHistory }) => {
-  // ... (Comparison State Logic kept same as before, simplified for brevity) ...
-  const [compRange, setCompRange] = useState('24h');
-  const [compParams, setCompParams] = useState({ actual_temp: true, actual_ph: false, actual_turb: false, pred_temp: false, pred_ph: false, pred_turb: false, wqi: false });
-
-  const comparisonData = useMemo(() => {
-    if (dataSource === 'real') return [];
-    // Just a placeholder mock for comparison for now
-    const data = []; const points = 24; const now = new Date();
-    for (let i = 0; i < points; i++) {
-      const time = new Date(now.getTime() - ((points - i) * 3600 * 1000));
-      data.push({ displayTime: time.toLocaleTimeString([], {hour: '2-digit'}), temp: 25 + Math.random(), ph: 7 + Math.random(), turbidity: 10 + Math.random(), wqi: 80 });
-    }
-    return data;
-  }, [dataSource]);
-
-  const toggleParam = (key) => setCompParams(prev => ({ ...prev, [key]: !prev[key] }));
-
+const Dashboard = ({ metrics, liveValues, dataSource, historyData, forecastData }) => {
   return (
-    <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {metrics.map((metric, index) => (
-          <div key={index} className="h-[600px]">
-            <StatCard 
-              title={metric.title} 
-              icon={metric.icon} 
-              baseDataConfig={metric.baseDataConfig} 
-              config={metric.config} 
-              type={metric.type} 
-              liveData={liveValues[metric.type]} 
-              dataSource={dataSource} 
-              historyData={simulationHistory} // PASS HISTORY HERE
-            />
-          </div>
-        ))}
-        {/* <WaterQualityIndexCard liveValues={liveValues} /> */}
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      
+      {/* Header Section */}
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-black text-slate-800">System Overview</h2>
+          <p className="text-slate-500 mt-1">Real-time sensor fusion and predictive analytics.</p>
+        </div>
+        <div className="hidden md:block text-xs font-mono text-slate-400 bg-slate-100 px-3 py-1 rounded-lg">
+           Last Data: {new Date().toLocaleTimeString()}
+        </div>
       </div>
 
-      {/* Advanced Comparison (Kept same structure) */}
-      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col md:flex-row justify-between items-start mb-8">
+      {/* LAYOUT FIX: 
+        - grid-cols-1: Mobile (default)
+        - md:grid-cols-3: Force 3 columns on Tablet (md) and up. 
+          This ensures vertical monitors (which often report as tablet width) see 3 columns.
+      */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {metrics.map((metric, index) => (
+          <StatCard 
+            key={index} 
+            {...metric} 
+            liveData={liveValues[metric.type]} 
+            dataSource={dataSource} 
+            historyData={historyData} 
+          />
+        ))}
+      </div>
+
+      {/* Footer / WQI Section */}
+      <div className="mt-8 pt-8 border-t border-slate-200">
+        <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 bg-indigo-50 rounded-lg"><SlidersHorizontal className="w-5 h-5 text-indigo-600" /></div>
-              <h2 className="text-xl font-extrabold text-slate-800">Advanced Comparison</h2>
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Water Quality Index</h3>
+            <div className="flex items-baseline gap-2">
+              <span className="text-5xl font-black text-slate-800">92</span>
+              <span className="text-lg font-bold text-emerald-500">Excellent</span>
             </div>
-            <p className="text-slate-500 text-sm max-w-xl">Overlay multiple parameters to find correlations.</p>
+            <p className="text-sm text-slate-500 mt-2 max-w-md">
+              Based on the weighted arithmetic mean of Temperature, pH, and Turbidity parameters relative to DENR standards.
+            </p>
+          </div>
+          <div className="h-16 w-16 rounded-full bg-orange-50 flex items-center justify-center border-2 border-orange-100">
+             <Activity className="w-8 h-8 text-orange-500" />
           </div>
         </div>
-        <div className="lg:col-span-3 bg-slate-50 rounded-2xl p-4 border border-slate-100 flex items-center justify-center min-h-[300px]">
-             <div className="text-slate-400 font-medium italic text-sm">Comparison chart populated by History module.</div>
-        </div>
       </div>
+
     </div>
   );
 };

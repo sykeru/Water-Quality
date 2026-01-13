@@ -1,12 +1,14 @@
 export const gradientStops = {
-  temp: [{ p: 0.0, r: 12, g: 103, b: 162, a: 1 }, 
-    { p: 1.0, r: 238, g: 71, b: 46, a: 1 }],
+  temp: [
+    { p: 0.0, r: 12, g: 103, b: 162, a: 1 }, 
+    { p: 1.0, r: 238, g: 71, b: 46, a: 1 }
+  ],
   ph: [
     { p: 0.00, r: 176, g: 28, b: 43, a: 1 },  // red
     { p: 0.10, r: 221, g: 58, b: 51, a: 1 },  // red orange
     { p: 0.20, r: 224, g: 202, b: 49, a: 1 }, // yellow
     { p: 0.30, r: 53, g: 132, b: 68, a: 1 },  // green
-    { p: 0.40, r: 31, g: 156, b: 209, a: 1 }, //  light blue
+    { p: 0.40, r: 31, g: 156, b: 209, a: 1 }, // light blue
     { p: 0.50, r: 32, g: 142, b: 196, a: 1 }, // blue
     { p: 0.60, r: 36, g: 31, b: 94, a: 1 },   // indigo
     { p: 0.80, r: 94, g: 42, b: 136, a: 1 },  // purple
@@ -37,6 +39,29 @@ export const getColorFromGradient = (value, min, max, stops) => {
   const last = stops[stops.length - 1];
   return `rgba(${last.r}, ${last.g}, ${last.b}, ${last.a})`;
 };
+
+// --- THIS FUNCTION WAS MISSING, CAUSING THE CRASH ---
+export const determineStatus = (type, value) => {
+  if (type === 'temp') {
+    if (value < 20) return 'Cold';
+    if (value < 25) return 'Cool';
+    if (value <= 30) return 'Optimal';
+    if (value <= 35) return 'Warm';
+    return 'Hot';
+  }
+  if (type === 'ph') {
+    if (value < 6.5) return 'Acidic';
+    if (value <= 8.5) return 'Neutral';
+    return 'Alkaline';
+  }
+  if (type === 'turbidity') {
+    if (value <= 10) return 'Clear';
+    if (value <= 30) return 'Cloudy';
+    return 'Turbid';
+  }
+  return 'Unknown';
+};
+// ----------------------------------------------------
 
 export const getStatusStyle = (status) => {
   if (!status) return 'bg-slate-100 text-slate-600 border-slate-200';
@@ -70,7 +95,7 @@ export const getDescriptiveAnalysis = (type, value) => {
   if (type === 'temp') {
     if (value < 20) return "Chemical reaction rates are slowed.";
     if (value > 30) return "Oxygen solubility is reduced.";
-    return " Thermal conditions are stable.";
+    return "Thermal conditions are stable.";
   }
 
   // --- pH LEVEL ---

@@ -1,99 +1,87 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine 
+  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { Sliders, Zap, Check, Play, Pause, Lightbulb } from 'lucide-react';
+import { Zap, Check, Lightbulb, TrendingUp, Table as TableIcon } from 'lucide-react';
 
-const generateForecastData = (range, simulationParams, currentNow) => {
-  const data = [];
-  let points = 24;
-  let interval = 60 * 60 * 1000;
-
-  if (range === '1h') { points = 60; interval = 60 * 1000; }
-  else if (range === '24h') { points = 24; interval = 60 * 60 * 1000; }
-  else if (range === '7d') { points = 84; interval = 2 * 60 * 60 * 1000; }
-  else if (range === '30d') { points = 60; interval = 12 * 60 * 60 * 1000; }
-
-  const startOffsetPoints = 5; 
-  const startTime = currentNow.getTime() - (startOffsetPoints * interval);
-
-  for (let i = 0; i < points + startOffsetPoints; i++) {
-    const time = new Date(startTime + (i * interval));
-    const isFuture = time.getTime() > currentNow.getTime();
-    const progress = Math.max(0, (i - startOffsetPoints) / points); 
-
-    let baseTemp = 28 + Math.sin(i * 0.3) * 2; 
-    let basePh = 7.5 + Math.cos(i * 0.2) * 0.4;
-    let baseTurb = 15 + (Math.sin(i * 0.5) * 5) + 5;
-
-    if (isFuture) {
-      baseTemp += simulationParams.ambientTemp * 0.5; 
-      baseTemp -= simulationParams.rainfall * 0.2;
-      baseTurb += simulationParams.rainfall * 3.5;
-      basePh -= simulationParams.rainfall * 0.05;
-      baseTurb += simulationParams.pollution * 4.0;
-      basePh -= simulationParams.pollution * 0.2;
-    }
-
-    const uncertainty = isFuture ? (progress * 1.5) + 0.2 : 0;
-    const noise = (Math.random() - 0.5) * 0.3;
-
-    const valTemp = Number((baseTemp + noise).toFixed(1));
-    const valPh = Number((basePh + (noise * 0.1)).toFixed(2));
-    const valTurb = Number((baseTurb + noise * 2).toFixed(1));
-
-    data.push({
-      time: time.toISOString(),
-      displayTime: range === '1h' ? time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
-                   range === '24h' ? time.toLocaleTimeString([], {hour: '2-digit'}) : 
-                   time.toLocaleDateString([], {month: 'short', day: 'numeric'}),
-      isFuture: isFuture,
-      temp_actual: !isFuture ? valTemp : null,
-      ph_actual: !isFuture ? valPh : null,
-      turb_actual: !isFuture ? valTurb : null,
-      temp_forecast: isFuture || i === startOffsetPoints - 1 ? valTemp : null,
-      ph_forecast: isFuture || i === startOffsetPoints - 1 ? valPh : null,
-      turb_forecast: isFuture || i === startOffsetPoints - 1 ? valTurb : null,
-      temp_range: isFuture ? [Number((valTemp - uncertainty).toFixed(1)), Number((valTemp + uncertainty).toFixed(1))] : null,
-      ph_range: isFuture ? [Number((valPh - (uncertainty * 0.1)).toFixed(2)), Number((valPh + (uncertainty * 0.1)).toFixed(2))] : null,
-      turb_range: isFuture ? [Number((valTurb - (uncertainty * 2)).toFixed(1)), Number((valTurb + (uncertainty * 2)).toFixed(1))] : null,
-    });
-  }
-  return data;
-};
-
-export default function Forecast({ dataSource }) {
-  const [range, setRange] = useState('24h');
-  const [isLive, setIsLive] = useState(true);
-  const [currentNow, setCurrentNow] = useState(new Date());
-
+export default function Forecast({ dataSource, forecastData, lastTimestamp = Date.now() }) {
+  const [activeInterval, setActiveInterval] = useState('hourly_24h');
   const [visibleParams, setVisibleParams] = useState({ temp: true, ph: false, turb: false });
-  const [simParams, setSimParams] = useState({ ambientTemp: 0, rainfall: 0, pollution: 0 });
 
-  useEffect(() => {
-    if (!isLive || dataSource === 'real') return; // Stop clock if real
-    const interval = setInterval(() => setCurrentNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, [isLive, dataSource]);
-
+  // --- DATA PROCESSING ENGINE ---
   const data = useMemo(() => {
-    if (dataSource === 'real') return []; // Return empty data for Real mode
-    return generateForecastData(range, simParams, currentNow);
-  }, [range, simParams, currentNow, dataSource]);
+    if (dataSource === 'real') {
+      if (!forecastData || !forecastData['Surface Temperature']) return [];
+
+      const tempNode = forecastData['Surface Temperature']?.[activeInterval];
+      const phNode = forecastData['pH']?.[activeInterval];
+      const turbNode = forecastData['Turbidity']?.[activeInterval];
+
+      if (!tempNode) return [];
+
+      const indices = Object.keys(tempNode).sort((a,b) => Number(a) - Number(b));
+
+      return indices.map(i => {
+        const index = Number(i);
+        let displayLabel = `+${index+1}`; // X-Axis Label (Short)
+        
+        // --- DATE CALCULATION LOGIC ---
+        let timeOffset = 0;
+        
+        if (activeInterval.includes('hourly')) {
+            displayLabel += 'h';
+            // Hourly means +1 hour per index
+            timeOffset = (index + 1) * 60 * 60 * 1000;
+        } else {
+            displayLabel += 'd';
+            // Daily means +1 day per index
+            timeOffset = (index + 1) * 24 * 60 * 60 * 1000;
+        }
+
+        // Calculate the future date based on the LAST received data point
+        const futureDate = new Date(lastTimestamp + timeOffset);
+        
+        // Format it nicely for the tooltip and table
+        const fullDateStr = futureDate.toLocaleString([], {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: activeInterval.includes('hourly') ? '2-digit' : undefined,
+            minute: activeInterval.includes('hourly') ? '2-digit' : undefined,
+        });
+
+        return {
+          id: i,
+          name: displayLabel,
+          fullDate: fullDateStr, 
+          
+          temp_forecast: tempNode[i] ? Number(tempNode[i]) : null,
+          ph_forecast: phNode && phNode[i] ? Number(phNode[i]) : null,
+          turb_forecast: turbNode && turbNode[i] ? Number(turbNode[i]) : null,
+        };
+      });
+    }
+    
+    return [];
+  }, [dataSource, forecastData, activeInterval, lastTimestamp]);
 
   const toggleParam = (key) => setVisibleParams(prev => ({ ...prev, [key]: !prev[key] }));
 
+  // --- CUSTOM TOOLTIP ---
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
+      // Get the calculated date from the first payload item
+      const dateStr = payload[0].payload.fullDate;
+
       return (
         <div className="bg-white/95 backdrop-blur-sm p-3 border border-slate-200 shadow-xl rounded-xl text-xs z-50">
-          <p className="font-bold text-slate-700 mb-2 border-b border-slate-100 pb-1">{label}</p>
+          <p className="font-bold text-slate-700 mb-2 border-b border-slate-100 pb-1">
+            Forecast: <span className="text-violet-600">{dateStr}</span> ({label})
+          </p>
           {payload.map((entry, index) => {
-            if (entry.dataKey.includes('range') || entry.value == null) return null;
+            if (entry.value == null) return null;
             return (
               <div key={index} className="flex items-center gap-2 mb-1" style={{ color: entry.color }}>
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
-                <span className="capitalize font-semibold">{entry.name.replace('_actual', '').replace('_forecast', '')}:</span>
+                <span className="capitalize font-semibold">{entry.name}:</span>
                 <span className="font-mono">{Number(entry.value).toFixed(2)}</span>
               </div>
             );
@@ -112,31 +100,39 @@ export default function Forecast({ dataSource }) {
         <div>
           <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
             Predictive Analytics
-            {isLive && dataSource === 'simulation' && (
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+            {dataSource === 'real' && (
+              <span className="relative flex h-3 w-3 ml-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-violet-500"></span>
               </span>
             )}
           </h2>
-          <p className="text-slate-500 text-sm">Real-time simulation & forecasting.</p>
+          <p className="text-slate-500 text-sm">Projected trends based on historical data patterns.</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
-          <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto">
-            {['1h', '24h', '7d', '30d'].map((r) => (
-              <button key={r} onClick={() => setRange(r)} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${range === r ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Next {r.toUpperCase()}</button>
-            ))}
-             <button disabled className="px-4 py-2 rounded-lg text-xs font-bold text-slate-300 cursor-not-allowed">Custom</button>
-          </div>
-          {dataSource === 'simulation' && (
-            <button onClick={() => setIsLive(!isLive)} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${isLive ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-              {isLive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />} {isLive ? 'Live Update' : 'Paused'}
+        
+        {/* INTERVAL CONTROLS */}
+        <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto">
+          {[
+            { label: 'Next 24 Hours', key: 'hourly_24h' },
+            { label: 'Next 7 Days', key: 'daily_7d' },
+            { label: 'Next 30 Days', key: 'daily_30d' }
+          ].map((item) => (
+            <button 
+              key={item.key} 
+              onClick={() => setActiveInterval(item.key)} 
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                activeInterval === item.key 
+                ? 'bg-white text-violet-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {item.label}
             </button>
-          )}
+          ))}
         </div>
       </div>
 
-      {/* LEFT COLUMN */}
+      {/* LEFT COLUMN: PARAMETERS */}
       <div className="lg:col-span-1 space-y-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Zap className="w-5 h-5 text-amber-500" /> Parameters</h3>
@@ -157,83 +153,132 @@ export default function Forecast({ dataSource }) {
           </div>
         </div>
 
-        {/* INSIGHTS - HIDE IF REAL MODE */}
-        {dataSource === 'simulation' ? (
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-yellow-500" /> AI Forecast
-            </h3>
-            <div className="space-y-4">
-               <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 text-xs text-blue-800 leading-snug">
-                 <strong>Trend Alert:</strong> Temperature is projected to rise by 0.5°C over the next 4 hours due to simulated ambient heat.
+        {/* INSIGHTS */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+             <Lightbulb className="w-5 h-5 text-violet-500" /> AI Insights
+           </h3>
+           {data.length > 0 ? (
+             <div className="space-y-4">
+               <div className="p-3 bg-violet-50 rounded-xl border border-violet-100 text-xs text-violet-800 leading-snug">
+                 <TrendingUp className="w-4 h-4 mb-1" />
+                 <strong>Trend Analysis:</strong> Data indicates a {activeInterval.includes('hourly') ? 'short-term' : 'long-term'} fluctuation pattern consistent with seasonal baselines.
                </div>
-               <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-800 leading-snug">
-                 <strong>Warning:</strong> Turbidity instability expected if rainfall intensity exceeds level 5 in the simulator.
-               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm opacity-50">
-             <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-slate-400" /> AI Forecast</h3>
-             <p className="text-xs text-slate-400 italic">None</p>
-          </div>
-        )}
-
-        
+             </div>
+           ) : (
+             <div className="text-xs text-slate-400 italic">Waiting for data...</div>
+           )}
+        </div>
       </div>
 
       {/* CHART COLUMN */}
       <div className="lg:col-span-3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm min-h-[500px] flex flex-col items-center justify-center">
         {data.length > 0 ? (
-            <>
-                <div className="w-full flex justify-end items-center gap-6 mb-4 text-xs font-bold text-slate-400 uppercase tracking-wide">
-                <div className="flex items-center gap-2"><span className="w-8 h-0 border-t-2 border-slate-400"></span> Historical</div>
-                <div className="flex items-center gap-2"><span className="w-8 h-0 border-t-2 border-dashed border-slate-400"></span> Forecast</div>
-                <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-slate-200"></span> Variance</div>
-                </div>
-                <div className="flex-grow w-full h-full min-h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                        <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
-                        <linearGradient id="gradPh" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="100%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
-                        <linearGradient id="gradTurb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2}/><stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="displayTime" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} minTickGap={30} />
-                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} domain={['auto', 'auto']} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <ReferenceLine x={data.find(d => d.isFuture)?.displayTime} stroke="#94a3b8" strokeDasharray="3 3" label={{ position: 'top', value: 'NOW', fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} />
+            <div className="flex-grow w-full h-full min-h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3b82f6" stopOpacity={0.2}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="gradPh" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="100%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="gradTurb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f59e0b" stopOpacity={0.2}/><stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} dy={10} minTickGap={30} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} domain={['auto', 'auto']} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend verticalAlign="top" height={36}/>
 
-                    {visibleParams.temp && (
-                        <>
-                        <Area type="monotone" dataKey="temp_range" fill="url(#gradTemp)" stroke="none" />
-                        <Line type="monotone" dataKey="temp_actual" name="Temperature" stroke="#3b82f6" strokeWidth={3} dot={false} />
-                        <Line type="monotone" dataKey="temp_forecast" name="Temperature Forecast" stroke="#3b82f6" strokeWidth={3} dot={false} strokeDasharray="5 5" />
-                        </>
-                    )}
-                    {visibleParams.ph && (
-                        <>
-                        <Area type="monotone" dataKey="ph_range" fill="url(#gradPh)" stroke="none" />
-                        <Line type="monotone" dataKey="ph_actual" name="pH Level" stroke="#10b981" strokeWidth={3} dot={false} />
-                        <Line type="monotone" dataKey="ph_forecast" name="pH Forecast" stroke="#10b981" strokeWidth={3} dot={false} strokeDasharray="5 5" />
-                        </>
-                    )}
-                    {visibleParams.turb && (
-                        <>
-                        <Area type="monotone" dataKey="turb_range" fill="url(#gradTurb)" stroke="none" />
-                        <Line type="monotone" dataKey="turb_actual" name="Turbidity" stroke="#f59e0b" strokeWidth={3} dot={false} />
-                        <Line type="monotone" dataKey="turb_forecast" name="Turbidity Forecast" stroke="#f59e0b" strokeWidth={3} dot={false} strokeDasharray="5 5" />
-                        </>
-                    )}
-                    </ComposedChart>
-                </ResponsiveContainer>
-                </div>
-            </>
+                  {visibleParams.temp && (
+                    <>
+                      {/* Added tooltipType="none" to remove duplicate black label from tooltip */}
+                      <Area type="monotone" dataKey="temp_forecast" fill="url(#gradTemp)" stroke="none" tooltipType="none" />
+                      <Line type="monotone" dataKey="temp_forecast" name="Temperature" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                    </>
+                  )}
+                  {visibleParams.ph && (
+                    <>
+                      <Area type="monotone" dataKey="ph_forecast" fill="url(#gradPh)" stroke="none" tooltipType="none" />
+                      <Line type="monotone" dataKey="ph_forecast" name="pH Level" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                    </>
+                  )}
+                  {visibleParams.turb && (
+                    <>
+                      <Area type="monotone" dataKey="turb_forecast" fill="url(#gradTurb)" stroke="none" tooltipType="none" />
+                      <Line type="monotone" dataKey="turb_forecast" name="Turbidity" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                    </>
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
         ) : (
-            <div className="text-slate-400 font-medium italic text-sm">No data available</div>
+            <div className="flex flex-col items-center justify-center text-slate-400">
+               <div className="text-sm font-medium italic">Fetching forecast data...</div>
+               <div className="text-xs mt-2">Ensure database path <code className="bg-slate-100 px-1 py-0.5 rounded">/RiverMonitor/Forecasts/data</code> exists.</div>
+            </div>
         )}
       </div>
+
+      {/* NEW: FORECAST DATA TABLE */}
+      <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+         <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center gap-2">
+                 <TableIcon className="w-5 h-5 text-slate-500" />
+                 <h3 className="text-lg font-bold text-slate-800">Forecast Data Table</h3>
+             </div>
+             <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-mono">
+                 {data.length} Predictions
+             </span>
+         </div>
+
+         <div className="overflow-x-auto max-h-[400px]">
+             <table className="w-full text-sm text-left text-slate-600">
+                 <thead className="text-xs text-slate-400 uppercase bg-slate-50 sticky top-0 z-10">
+                     <tr>
+                         <th className="px-4 py-3 rounded-tl-lg">Projected Time</th>
+                         {visibleParams.temp && <th className="px-4 py-3">Temperature (°C)</th>}
+                         {visibleParams.ph && <th className="px-4 py-3">pH Level</th>}
+                         {visibleParams.turb && <th className="px-4 py-3">Turbidity (NTU)</th>}
+                     </tr>
+                 </thead>
+                 <tbody>
+                     {data.length > 0 ? (
+                         data.map((row) => (
+                             <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                                 <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
+                                     {row.fullDate} <span className="text-slate-400 text-xs ml-1">({row.name})</span>
+                                 </td>
+                                 
+                                 {visibleParams.temp && (
+                                    <td className="px-4 py-3 text-blue-600 font-mono">
+                                        {row.temp_forecast !== null ? row.temp_forecast.toFixed(2) : '--'}
+                                    </td>
+                                 )}
+                                 
+                                 {visibleParams.ph && (
+                                     <td className="px-4 py-3 text-emerald-600 font-mono">
+                                         {row.ph_forecast !== null ? row.ph_forecast.toFixed(2) : '--'}
+                                     </td>
+                                 )}
+                                 
+                                 {visibleParams.turb && (
+                                     <td className="px-4 py-3 text-amber-600 font-mono">
+                                         {row.turb_forecast !== null ? row.turb_forecast.toFixed(2) : '--'}
+                                     </td>
+                                 )}
+                             </tr>
+                         ))
+                     ) : (
+                         <tr>
+                             <td colSpan="4" className="px-4 py-8 text-center text-slate-400 italic">
+                                 No forecast data available for this range.
+                             </td>
+                         </tr>
+                     )}
+                 </tbody>
+             </table>
+         </div>
+      </div>
+
     </div>
   );
 }

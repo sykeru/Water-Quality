@@ -53,8 +53,12 @@ const CircularGauge = ({ value, min, max, type, unit, status }) => {
   const statusClasses = getStatusStyle(status);
 
   return (
-    <div className="relative flex flex-col items-center justify-center -mt-4">
-      <svg width="220" height="180" viewBox="0 0 220 180" className="overflow-visible">
+    <div className="relative flex flex-col items-center justify-center -mt-4 w-full">
+      {/* RESIZING FIX: 
+         Removed fixed width="220" height="180". 
+         Added viewBox and className to allow scaling within the 3-column grid.
+      */}
+      <svg viewBox="0 0 220 180" className="w-full h-auto max-w-[220px] overflow-visible">
         <defs><filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.2"/></filter></defs>
         {type === 'temp' && (<path d={describeArc(center, center, radius, startAngle, endAngle)} fill="none" stroke="#e2e8f0" strokeWidth={stroke} strokeLinecap="round" />)}
         {renderAngularGradient()}
